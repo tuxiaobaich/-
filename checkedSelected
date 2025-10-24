@@ -1,0 +1,133 @@
+// ...existing code...
+<template>
+    <div class="container">
+        <div class="left">
+            <el-checkbox :model-value="pageAllSelected" :indeterminate="pageIndeterminate" @change="togglePageAll">全选（本页）</el-checkbox>
+
+            <div class="select-item" v-for="value in displayItems" :key="value.id">
+                <el-checkbox v-model="value.checked" @change="() => onItemChange(value)"></el-checkbox>
+                <span>{{ value.label }}</span>
+            </div>
+
+            <div style="margin-top:12px;text-align:right;">
+              <el-pagination
+                layout="prev, pager, next"
+                :total="total"
+                :page-size="pageSize"
+                v-model:current-page="currentPage"
+                @current-change="handlePageChange"
+              />
+            </div>
+        </div>
+        <div class="right">
+            <div class="select-item" v-for="value in checkedItems" :key="value.id">
+                <el-checkbox :model-value="true" @change="() => removeSelected(value.id)"></el-checkbox>
+                <span>{{ value.label }}</span>
+            </div>
+        </div>
+    </div>
+
+</template>
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+// 当前页数据（由 fetch 填充）
+const displayItems = ref<Array<{ id: number; label: string; checked?: boolean }>>([])
+
+// 跨页已选集合：id -> item
+const selectedMap = ref(new Map<number, any>())
+console.log('selectedMap', selectedMap)
+
+// 右侧展示从 selectedMap 拉取
+const checkedItems = computed(() => Array.from(selectedMap.value.values()))
+
+// 分页相关
+const currentPage = ref(1)
+const pageSize = ref(5)
+const total = ref(0)
+
+// 模拟后端所有数据（实际请替换为接口请求）
+const allData = Array.from({ length: 42 }, (_, i) => ({ id: i + 1, label: `名称${i + 1}` }))
+
+// 从“后端”获取分页数据并同步 checked 状态
+const fetchData = async (page = 1) => {
+  // 模拟异步请求
+  const start = (page - 1) * pageSize.value
+  const pageItems = allData.slice(start, start + pageSize.value)
+  // 把当前页数据的 checked 状态与 selectedMap 对齐
+  displayItems.value = pageItems.map(it => ({ ...it, checked: selectedMap.value.has(it.id) }))
+  total.value = allData.length
+}
+
+// 页面级“全选”计算（仅针对当前页）
+const pageAllSelected = computed({
+  get() {
+    if (!displayItems.value.length) return false
+    return displayItems.value.every(i => i.checked)
+  },
+  set(val: boolean) {
+    displayItems.value.forEach(i => {
+      i.checked = val
+      if (val) selectedMap.value.set(i.id, { id: i.id, label: i.label })
+      else selectedMap.value.delete(i.id)
+    })
+  }
+})
+
+// 本页半选状态
+const pageIndeterminate = computed(() => {
+  const totalCount = displayItems.value.length
+  if (totalCount === 0) return false
+  const checkedCount = displayItems.value.reduce((s, i) => s + (i.checked ? 1 : 0), 0)
+  return checkedCount > 0 && checkedCount < totalCount
+})
+
+// 当单个项改变时更新 selectedMap（不直接把父数据改写）
+const onItemChange = (item: { id: number; label: string; checked?: boolean }) => {
+  if (item.checked) selectedMap.value.set(item.id, { id: item.id, label: item.label })
+  else selectedMap.value.delete(item.id)
+}
+
+// 右侧取消选中
+const removeSelected = (id: number) => {
+  selectedMap.value.delete(id)
+  // 如果当前页包含该 id，同步当前页 checked 状态
+  const idx = displayItems.value.findIndex(i => i.id === id)
+  if (idx !== -1) displayItems.value[idx].checked = false
+}
+
+// 翻页处理：请求数据并回显 selectedMap 的选中状态
+const handlePageChange = async (page: number) => {
+  currentPage.value = page
+  await fetchData(page)
+}
+
+// 本页全选切换（由外部 checkbox 触发）
+const togglePageAll = (checked: boolean) => {
+  pageAllSelected.value = checked
+}
+
+// 初始加载第一页
+onMounted(() => {
+  fetchData(currentPage.value)
+})
+</script>
+<style lang="less" scoped>
+.container {
+    display: flex;
+    .left, .right {
+        width: 50%;
+        border: 1px solid #ccc;
+        padding: 10px;
+        box-sizing: border-box;
+    }
+    .select-item {
+        display: flex;
+        align-items: center;
+        margin-top: 10px;
+        span {
+            margin-left: 8px;
+        }
+    }
+}
+</style>
+// ...existing code...
